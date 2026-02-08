@@ -17,6 +17,7 @@ FLUX2_MODEL_INFO = {
         "repo_id": "black-forest-labs/FLUX.2-klein-4B",
         "filename": "flux-2-klein-4b.safetensors",
         "filename_ae": "ae.safetensors",
+        "ae_repo_id": "black-forest-labs/FLUX.2-dev",  # Shared autoencoder from dev repo
         "params": Klein4BParams(),
         "text_encoder_load_fn": lambda device="cuda": load_qwen3_embedder(variant="4B", device=device),
         "model_path": "KLEIN_4B_MODEL_PATH",
@@ -28,6 +29,7 @@ FLUX2_MODEL_INFO = {
         "repo_id": "black-forest-labs/FLUX.2-klein-9B",
         "filename": "flux-2-klein-9b.safetensors",
         "filename_ae": "ae.safetensors",
+        "ae_repo_id": "black-forest-labs/FLUX.2-dev",  # Shared autoencoder from dev repo
         "params": Klein9BParams(),
         "text_encoder_load_fn": lambda device="cuda": load_qwen3_embedder(variant="8B", device=device),
         "model_path": "KLEIN_9B_MODEL_PATH",
@@ -123,8 +125,10 @@ def load_ae(model_name: str, device: str | torch.device = "cuda") -> AutoEncoder
     else:
         # download from huggingface
         try:
+            # Use ae_repo_id if specified, otherwise fall back to repo_id
+            ae_repo = config.get("ae_repo_id", config["repo_id"])
             weight_path = huggingface_hub.hf_hub_download(
-                repo_id=config["repo_id"],
+                repo_id=ae_repo,
                 filename=config["filename_ae"],
                 repo_type="model",
             )

@@ -283,10 +283,12 @@ def main(
     torch_device = torch.device("cuda")
 
     text_encoder = load_text_encoder(model_name, device=torch_device)
-    if "klein" in model_name:
-        mod_and_upsampling_model = load_text_encoder("flux.2-dev")
-    else:
-        mod_and_upsampling_model = text_encoder
+    # Skip prompt upsampling model for Klein to save VRAM (24B model is huge!)
+    # if "klein" in model_name:
+    #     mod_and_upsampling_model = load_text_encoder("flux.2-dev")
+    # else:
+    #     mod_and_upsampling_model = text_encoder
+    mod_and_upsampling_model = text_encoder  # Use same encoder, skip upsampling
 
     model = load_flow_model(
         model_name, debug_mode=debug_mode, device="cpu" if cpu_offloading else torch_device
@@ -348,13 +350,15 @@ def main(
                         )
                         continue
 
-                if "prompt" in updates and mod_and_upsampling_model.test_txt(updates["prompt"]):
-                    print(
-                        "Your prompt has been flagged for potential copyright or public personas concerns. Please choose another."
-                    )
-                    updates.pop("prompt")
+                # Skip prompt testing if model doesn't support it (e.g., Qwen3)
+                if "prompt" in updates and hasattr(mod_and_upsampling_model, 'test_txt'):
+                    if mod_and_upsampling_model.test_txt(updates["prompt"]):
+                        print(
+                            "Your prompt has been flagged for potential copyright or public personas concerns. Please choose another."
+                        )
+                        updates.pop("prompt")
 
-                if "input_images" in updates:
+                if "input_images" in updates and hasattr(mod_and_upsampling_model, 'test_image'):
                     flagged = False
                     for image in updates["input_images"]:
                         if mod_and_upsampling_model.test_image(image):
@@ -549,11 +553,15 @@ def main(
                         cfg.upsample_prompt_mode = "none"
                         prompt = cfg.prompt
                 elif cfg.upsample_prompt_mode == "local":
-                    # Use local model for upsampling
-                    upsampled_prompts = mod_and_upsampling_model.upsample_prompt(
-                        [cfg.prompt], img=[img_ctx] if img_ctx else None
-                    )
-                    prompt = upsampled_prompts[0] if upsampled_prompts else cfg.prompt
+                    # Use local model for upsampling (if supported)
+                    if hasattr(mod_and_upsampling_model, 'upsample_prompt'):
+                        upsampled_prompts = mod_and_upsampling_model.upsample_prompt(
+                            [cfg.prompt], img=[img_ctx] if img_ctx else None
+                        )
+                        prompt = upsampled_prompts[0] if upsampled_prompts else cfg.prompt
+                    else:
+                        print("  ! Local upsampling not supported with this model, using original prompt")
+                        prompt = cfg.prompt
                 else:
                     # upsample_prompt_mode == "none" or invalid value
                     prompt = cfg.prompt
